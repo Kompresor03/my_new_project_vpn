@@ -1,0 +1,13 @@
+{
+    "info": "This is a generated file; do not edit or check into version control.",
+    "plugins": {
+      "ios": {},
+      "android": {
+        "openvpn_flutter": {
+          "package": "de.blinkt.openvpn",
+          "pluginClass": "OpenVPNFlutterPlugin",
+          "basePackage": "de.blinkt.openvpn"
+        }
+      }
+    }
+  }

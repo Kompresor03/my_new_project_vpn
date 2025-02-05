@@ -1,0 +1,73 @@
+/*
+Рабочие настройки сборки SpyDog VPN (19.01.2024):
+
+Системные требования:
+- Java: OpenJDK 17.0.12 (Eclipse Adoptium)
+- Java path: C:\Program Files\Eclipse Adoptium\jdk-17.0.12.7-hotspot
+- Android SDK: API level 34
+- Gradle: 7.5
+- Kotlin: 1.8.0
+
+Ключевые настройки в файлах:
+android/app/build.gradle:
+    compileSdkVersion 34
+    targetSdkVersion 34
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+    jvmTarget = '17'
+
+android/gradle/wrapper/gradle-wrapper.properties:
+    distributionUrl=https\://services.gradle.org/distributions/gradle-7.5-all.zip
+
+android/gradle.properties:
+    gradle.user.home=D:/gradle-home
+*/
+
+buildscript {
+    ext.kotlin_version = '1.7.10'
+    ext.gradle_version = '7.3.0'
+    
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+        maven { url 'https://jitpack.io' }
+        maven { url 'https://storage.googleapis.com/download.flutter.io' }
+    }
+    
+    dependencies {
+        classpath "com.android.tools.build:gradle:$gradle_version"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { 
+            url 'https://jitpack.io'
+            content {
+                includeGroup "com.github.anoop44"
+            }
+        }
+        maven { url "https://storage.googleapis.com/download.flutter.io" }
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+    }
+
+    configurations.all {
+        resolutionStrategy {
+            force 'com.github.anoop44:ics-openvpn:master-SNAPSHOT'
+        }
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}

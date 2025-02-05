@@ -1,0 +1,99 @@
+name: my_new_project
+description: A new Flutter project.
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=2.17.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  url_launcher: ^6.1.7
+  smooth_page_indicator: ^1.0.0
+  provider: ^6.0.0
+  share_plus: ^10.1.2
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.5
+  http: ^1.2.0
+  permission_handler: ^11.3.0  # Перенесено на отдельную строку
+  openvpn_flutter: ^1.3.2
+  dio: ^5.4.0
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/main_screen.png
+    - assets/images/button1.png
+    - assets/images/button2.png
+    - assets/images/button3.png
+    - assets/images/button4.png
+    - assets/images/slide1.png
+    - assets/images/slide2.png
+    - assets/images/slide3.png
+    - assets/images/slide4.png
+    - assets/images/slide5.png
+    - assets/images/buttoncross.png
+    - assets/images/moon.png
+    - assets/images/sun.png
+    - assets/images/iconmenulight.png
+    - assets/images/iconmenudark.png
+    - assets/images/logo.png
+    - assets/images/logolight.png
+    - assets/images/chat.png
+    - assets/images/space.png
+    - assets/images/lapa.png
+    - assets/images/king.png
+    - assets/images/buttononn.png
+    - assets/images/ping.png
+    - assets/images/yellowLine.png
+    - assets/images/greeLine.png
+    - assets/images/arrowleft.png
+    - assets/images/arrowcircle.png
+    - assets/images/gopremiumdark.png
+    - assets/images/gopremium.png
+    - assets/images/about.png
+    - assets/images/buttoncrossdark.png
+    - assets/images/buttoncrosslight.png
+    - assets/images/language.png
+    - assets/images/Share.png
+    - assets/images/germany.jpg
+    - assets/images/gopremiumdark1.png
+    - assets/images/arrowleft1.png
+    - assets/images/arrowleft2.png
+    - assets/images/english.png
+    - assets/images/russian.png
+    - assets/images/chekbox.png
+    - assets/images/chekbox1.png
+    - assets/images/galka.png
+    - assets/images/galka1.png
+    - assets/images/planet.png
+    - assets/images/image0.png
+    - assets/images/lapalight1.png
+    - assets/images/lapalight.png
+    - assets/images/lapadark.png
+    - assets/images/buttononnlight.png
+    - assets/images/buttononnblack2.png
+    - assets/images/buttononnblack1.png
+    - assets/images/Buttononndarkoff.png
+    - assets/images/Buttononndarkonn.png
+    - assets/images/Buttononnlightoff.png
+    - assets/images/Buttononnlightonn.png
+
+  fonts:
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat-Regular.ttf
+        - asset: assets/fonts/Montserrat-SemiBold.ttf
+          weight: 600

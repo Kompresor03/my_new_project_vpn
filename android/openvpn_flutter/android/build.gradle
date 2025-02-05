@@ -1,0 +1,50 @@
+group 'id.laskarmedia.openvpn_flutter'
+version '1.0'
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.1'
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'id.laskarmedia.openvpn_flutter'
+    compileSdkVersion 34
+
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 34
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lintOptions {
+        disable 'InvalidPackage'
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    implementation 'androidx.annotation:annotation:1.7.0'
+    implementation 'net.sourceforge.streamsupport:android-retrofuture:1.7.4'
+    implementation 'net.sourceforge.streamsupport:android-retrostreams:1.7.4'
+
+    // Используем библиотеку из JitPack
+    implementation 'com.github.schwabe:ics-openvpn:v0.7.54'
+}

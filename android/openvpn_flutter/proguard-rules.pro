@@ -1,0 +1,3 @@
+-keep class id.laskarmedia.openvpn_flutter.** { *; }
+-keep class de.blinkt.openvpn.** { *; }
+-keep class net.sourceforge.streamsupport.** { *; }
