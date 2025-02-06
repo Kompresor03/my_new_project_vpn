@@ -62,35 +62,41 @@ class ApiService {
     }
   }
 
-  Future<String?> getVpnConfig(int locationId) async {
+  Future<String> getVpnConfig(int locationId) async {
     try {
       debugPrint('[API] Getting config for location ID: $locationId');
-      
-      // Используем правильный путь к API
       final response = await _get('get_vpn_config.php', {
         'location_id': locationId.toString()
       });
-
       debugPrint('[API] Config response status: ${response.statusCode}');
-      debugPrint('[API] Config response body: ${response.body}');
+      debugPrint('[API] Response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true && data['config'] != null) {
-          final config = data['config'] as String;
-          if (config.isNotEmpty) {
-            debugPrint('[API] Successfully got VPN config');
-            return config;
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (data['success'] == true) {
+          if (data['config'] == null) {
+            debugPrint('[API] Error: No config in response');
+            throw Exception('No VPN config in response');
           }
+          String config = data['config'] as String;
+          if (!config.contains('</ca>') || !config.contains('</cert>') || !config.contains('</key>')) {
+            debugPrint('[API] Error: Incomplete OpenVPN configuration');
+            throw Exception('Incomplete OpenVPN configuration');
+          }
+          debugPrint('[API] Полная конфигурация VPN получена успешно');
+          return config;
         }
-        debugPrint('[API] Invalid config data: $data');
+        if (data['error'] != null) {
+          debugPrint('[API] Server error: ${data['error']}');
+          throw Exception('Server error: ${data['error']}');
+        }
       }
-      
-      debugPrint('[API] Failed to get valid config');
-      return null;
+      debugPrint('[API] Failed to get valid config. Status: ${response.statusCode}');
+      throw Exception('Failed to get VPN config');
     } catch (e) {
-      debugPrint('[API] Error getting config: $e');
-      return null;
+      debugPrint('[API] Ошибка получения конфигурации VPN: $e');
+      debugPrint('[API] Stack trace: ${StackTrace.current}');
+      rethrow;
     }
   }
 
@@ -420,20 +426,20 @@ Certificate:
                     11:db:4b:7b:be:c2:91:98:38:e1:ef:8c:90:fc:4f:
                     ae:5d:56:01:79:8c:d7:bd:c1:35:43:e1:3d:27:c2:
                     77:27:32:27:d0:d0:ac:4d:f6:ce:af:46:0b:ca:7c:
-                    38:4d:e7:2e:8b:93:59:c5:72:b7:10:51:fb:70:ba:
-                    af:cd:c7:68:7d:08:f7:a9:54:34:0d:a4:4a:5e:00:
-                    22:12:36:d5:21:aa:c9:99:f1:b5:c7:3b:55:3d:e6:
-                    89:85:6a:a9:06:ed:43:2d:b4:6e:67:ff:82:cb:94:
-                    ed:45:cc:e1:00:3a:9d:36:60:d6:45:48:ed:66:fd:
-                    92:9f:79:70:58:f0:03:48:cc:a6:d7:ec:42:60:e8:
-                    18:3e:e2:45:ae:2d:87:a1:e9:b2:a9:f8:4f:5d:e9:
-                    8f:26:bb:17:53:38:97:00:12:15:64:ed:6d:69:b6:
-                    7b:99:4b:22:04:72:b3:07:de:db:a7:1b:af:05:c0:
-                    8e:95:61:25:43:9e:fb:2a:60:c1:5e:cb:1e:57:57:
-                    93:90:2c:6f:b3:02:b7:b2:c4:a1:40:87:f2:31:64:
-                    8c:cb:53:01:c5:83:e3:e3:da:18:ad:b0:e3:ef:4c:
-                    43:eb:8d:ac:73:90:6f:f4:da:46:53:be:08:be:84:
-                    aa:f5
+                    38:4d:e7:2e:8b:93:59:c5:72:b7:10:51:fb:70:
+                    ba:af:cd:c7:68:7d:08:f7:a9:54:34:0d:a4:4a:5e:
+                    00:22:12:36:d5:21:aa:c9:99:f1:b5:c7:3b:55:3d:
+                    e6:89:85:6a:a9:06:ed:43:2d:b4:6e:67:ff:82:cb:
+                    94:ed:45:cc:e1:00:3a:9d:36:60:d6:45:48:ed:66:
+                    fd:92:9f:79:70:58:f0:03:48:cc:a6:d7:ec:42:60:
+                    e8:18:3e:e2:45:ae:2d:87:a1:e9:b2:a9:f8:4f:5d:
+                    e9:8f:26:bb:17:53:38:97:00:12:15:64:ed:6d:69:
+                    b6:7b:99:4b:22:04:72:b3:07:de:db:a7:1b:af:05:
+                    c0:8e:95:61:25:43:9e:fb:2a:60:c1:5e:cb:1e:
+                    57:57:93:90:2c:6f:b3:02:b7:b2:c4:a1:40:87:f2:
+                    31:64:8c:cb:53:01:c5:83:e3:e3:da:18:ad:b0:e3:
+                    ef:4c:43:eb:8d:ac:73:90:6f:f4:da:46:53:be:08:be:
+                    84:aa:f5
                 Exponent: 65537 (0x10001)
         X509v3 extensions:
             X509v3 Basic Constraints: 

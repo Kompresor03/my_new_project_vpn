@@ -40,7 +40,7 @@ class _CountresScreenState extends State<CountresScreen> {
     super.initState();
     _isAutoMode = widget.isAutoMode;
     _loadLocations();
-    
+
     selectionMode = widget.currentLocation == null ? SelectionMode.auto : SelectionMode.manual;
   }
 
@@ -50,7 +50,7 @@ class _CountresScreenState extends State<CountresScreen> {
       setState(() {
         locations = loadedLocations;
         isLoading = false;
-        
+
         if (widget.currentLocation != null) {
           for (var loc in locations) {
             loc.isSelected = loc.id == widget.currentLocation!.id;
@@ -71,7 +71,7 @@ class _CountresScreenState extends State<CountresScreen> {
       setState(() {
         _isAutoMode = value;
       });
-      
+
       Navigator.pop(context, {
         'isAutoMode': value,
         'country': value ? 'Auto' : widget.selectedCountry,
@@ -96,7 +96,7 @@ class _CountresScreenState extends State<CountresScreen> {
           loc.isSelected = false;
         }
       });
-      
+
       Navigator.pop(context, {
         'isAutoMode': true,
         'country': 'Auto',
@@ -113,7 +113,7 @@ class _CountresScreenState extends State<CountresScreen> {
 
     setState(() {
       selectionMode = SelectionMode.manual;
-      
+
       for (var loc in locations) {
         loc.isSelected = false;
       }
@@ -357,9 +357,9 @@ class _CountresScreenState extends State<CountresScreen> {
                 child: isLoading
                     ? Center(child: CircularProgressIndicator())
                     : ListView.builder(
-                        itemCount: locations.length,
-                        itemBuilder: (context, index) => _buildLocationItem(locations[index]),
-                      ),
+                  itemCount: locations.length,
+                  itemBuilder: (context, index) => _buildLocationItem(locations[index]),
+                ),
               ),
             ],
           ),

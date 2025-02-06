@@ -1,5 +1,7 @@
 import 'package:openvpn_flutter/openvpn_flutter.dart';
 import 'dart:async';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/foundation.dart';
 
 class VpnService {
   final OpenVPN _openVPN = OpenVPN();
@@ -16,17 +18,74 @@ class VpnService {
   // Геттер возвращает поток состояний VPN
   Stream<String> get vpnStateStream => _stateController.stream;
   
+  Timer? _statusTimer;
+
   VpnService() {
-    // Инициализируем слушатели в конструкторе
-    _initializeVpn();
+    // Не инициализируем сразу
+  }
+
+  Future<void> initialize() async {
+    if (!_initialized) {
+      await _initializeVpn();
+    }
   }
 
   Future<void> _initializeVpn() async {
     try {
       await _openVPN.initialize();
       
-      // В v1.3.3 отсутствует API для подписки на изменение статуса,
-      // поэтому здесь обратные вызовы не устанавливаются.
+      // Настраиваем периодическую проверку статуса
+      _statusTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
+        try {
+          final dynamic status = await _openVPN.status();
+          debugPrint('[VPN] Current status: $status');
+          
+          if (status != null && status is Map<String, dynamic>) {
+            // Определяем статус на основе значений в Map
+            String newStatus = "UNKNOWN";
+            
+            // Проверяем значения для определения статуса
+            if (status['duration'] != null) {
+              if (status['duration'] != "00:00:00") {
+                newStatus = "CONNECTED";
+              } else {
+                newStatus = "DISCONNECTED";
+              }
+            }
+            
+            // Обновляем статус только если он изменился
+            if (newStatus != _currentStatus) {
+              debugPrint('[VPN] Status changed: $newStatus');
+              switch (newStatus) {
+                case "CONNECTED":
+                  _currentStatus = "connected";
+                  _stateController.add(_currentStatus);
+                  break;
+                case "DISCONNECTED":
+                  _currentStatus = "disconnected";
+                  _stateController.add(_currentStatus);
+                  break;
+                case "CONNECTING":
+                  _currentStatus = "connecting";
+                  _stateController.add(_currentStatus);
+                  break;
+                case "DISCONNECTING":
+                  _currentStatus = "disconnecting";
+                  _stateController.add(_currentStatus);
+                  break;
+                case "ERROR":
+                  _currentStatus = "error";
+                  _stateController.add(_currentStatus);
+                  break;
+                default:
+                  debugPrint('[VPN] Unhandled status: $newStatus');
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('[VPN] Error checking status: $e');
+        }
+      });
       
       _initialized = true;
     } catch (e) {
@@ -51,17 +110,34 @@ class VpnService {
   /// Второй аргумент передается пустой строкой для соответствия сигнатуре плагина.
   Future<void> connect(String config) async {
     try {
+      await initialize();  // Инициализируем при подключении
       if (!_initialized) {
-        print("[VPN] Инициализация VPN сервиса...");
-        await _initializeVpn();
+        throw Exception('VPN service not initialized');
       }
 
       _currentStatus = "connecting";
       _stateController.add(_currentStatus);
       
-      print("[VPN] Начало подключения к VPN");
-      print("[VPN] Конфигурация до модификации:\n$config");
+      // Проверяем целостность конфигурации
+      if (!config.contains('</ca>') || !config.contains('</cert>') || !config.contains('</key>')) {
+        throw Exception('Incomplete OpenVPN configuration: Missing required certificates');
+      }
+
+      debugPrint('[VPN] Начало подключения к VPN');
+      debugPrint('[VPN] Конфигурация до модификации:');
+      debugPrint(config);
       
+      // Проверяем разрешения
+      var permStatus = await Permission.notification.status;
+      debugPrint('[VPN] Статус разрешения уведомлений: $permStatus');
+      
+      if (!permStatus.isGranted) {
+        debugPrint('[VPN] Запрашиваем разрешение на уведомления');
+        await Permission.notification.request();
+      }
+
+      // VPN разрешения запрашиваются автоматически плагином
+
       if (_host != null) {
         final String protocol = (_port == 443) ? 'tcp' : 'udp';
         
@@ -89,21 +165,27 @@ pull-filter ignore "ifconfig-ipv6"
         print("[VPN] Итоговая конфигурация:\n$config");
       }
       
-      print("[VPN] Попытка подключения через OpenVPN...");
-      await _openVPN.connect(config, "").timeout(
-        Duration(seconds: 120),
-        onTimeout: () {
-          print("[VPN] Превышено время ожидания подключения (120 сек)");
-          throw TimeoutException("VPN connection timeout");
-        },
-      );
+      debugPrint('[VPN] Попытка подключения через OpenVPN...');
+
+      try {
+        await _openVPN.connect(
+          config,
+          'SpyDog VPN',
+          username: '',
+          password: '',
+          bypassPackages: [],
+          certIsRequired: true,
+        );
+      } catch (vpnError) {
+        debugPrint('[VPN] Ошибка при подключении OpenVPN: $vpnError');
+        rethrow;
+      }
       
-      _currentStatus = "connected";
-      _stateController.add(_currentStatus);
       print("[VPN] Подключение успешно установлено");
       
     } catch (e) {
-      print("[VPN] Ошибка при подключении: $e");
+      debugPrint('[VPN] Общая ошибка при подключении: $e');
+      debugPrint('[VPN] Stack trace: ${StackTrace.current}');
       _currentStatus = "error";
       _stateController.add(_currentStatus);
       rethrow;
@@ -113,7 +195,11 @@ pull-filter ignore "ifconfig-ipv6"
   /// Отключение от VPN.
   Future<void> disconnect() async {
     try {
-      _openVPN.disconnect();
+      await initialize();  // Инициализируем при отключении
+      if (!_initialized) {
+        throw Exception('VPN service not initialized');
+      }
+      _openVPN.disconnect();  // Убираем await, так как метод возвращает void
       _currentStatus = "disconnected";
       _stateController.add(_currentStatus);
       print("VpnService: Disconnected");
@@ -124,8 +210,13 @@ pull-filter ignore "ifconfig-ipv6"
   }
   
   /// Возвращает текущее состояние VPN.
-  String getStatus() {
-    return _currentStatus;
+  Map<String, String>? getStatus() {
+    // Возвращаем Map с данными о статусе
+    return {
+      'byteIn': '0',
+      'byteOut': '0',
+      // другие данные статуса...
+    };
   }
   
   /// Проверяет доступность сервера с указанным [host] и [port].
@@ -153,6 +244,7 @@ pull-filter ignore "ifconfig-ipv6"
   
   /// Освобождает ресурсы, закрывая поток состояний.
   void dispose() {
+    _statusTimer?.cancel();
     _openVPN.disconnect();
     _stateController.close();
   }

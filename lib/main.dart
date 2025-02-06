@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:my_new_project/screens/welcome_screen.dart';
-  // Добавьте этот импорт
 
 void main() {
   runApp(const MyApp());
@@ -17,13 +16,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      // Заменяем home на initialRoute
-      initialRoute: '/',
-      // Добавляем маршруты
-      routes: {
-        '/': (context) => WelcomeScreen(),
-        '/vpn_test': (context) => const VpnTestScreen(),
-      },
+      home: WelcomeScreen(),
     );
   }
 }
