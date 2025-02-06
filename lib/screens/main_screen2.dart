@@ -7,9 +7,10 @@ import 'language.dart';
 import 'countres.dart';
 import 'dart:async';
 import '../models/location.dart';
-import 'vpn_test_screen.dart';
 import '../services/vpn_service.dart';
 import '../services/api_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:openvpn_flutter/openvpn_flutter.dart';
 
 class MainScreen2 extends StatefulWidget {
   @override
@@ -19,7 +20,7 @@ class MainScreen2 extends StatefulWidget {
 class _MainScreen2State extends State<MainScreen2> {
   final VpnService _vpnService = VpnService();
   final ApiService _apiService = ApiService();
-  
+
   bool isDarkTheme = false;
   bool isConnecting = false;
   bool isConnected = false;
@@ -38,14 +39,115 @@ class _MainScreen2State extends State<MainScreen2> {
   final String baseUrl = 'http://10.0.2.2/material-admin-master';
   bool isAutoMode = true;
 
+  late OpenVPN engine;
+  VPNStage _vpnStage = VPNStage.disconnected;
+  bool _isInitialized = false;
+  bool _isConnecting = false;
+  Timer? _connectionTimer;
+
   @override
   void initState() {
     super.initState();
-    _initVpnStateListener();
-    setState(() {
-      selectedCountry = 'Auto';
-      isAutoMode = true;
-    });
+    _initializeVPN();
+  }
+
+  @override
+  void dispose() {
+    _trafficTimer?.cancel();
+    _connectionTimer?.cancel();
+    if (_vpnStage != VPNStage.disconnected) {
+      _disconnectVPN();
+    }
+    _vpnService.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initializeVPN() async {
+    if (!_isInitialized) {
+      try {
+        engine = OpenVPN(
+          onVpnStatusChanged: _onVpnStatusChanged,
+          onVpnStageChanged: _onVpnStageChanged,
+        );
+
+        await engine.initialize(
+          groupIdentifier: "group.com.spydog.vpn",
+          providerBundleIdentifier: "com.spydog.vpn.VPNExtension",
+          localizedDescription: "SpyDog VPN",
+        );
+        
+        await _requestVPNPermissions();
+        
+        _isInitialized = true;
+        debugPrint('[VPN] Инициализация успешна');
+      } catch (e) {
+        debugPrint('[VPN] Ошибка инициализации: $e');
+        _isInitialized = false;
+      }
+    }
+  }
+
+  Future<void> _requestVPNPermissions() async {
+    try {
+      var notificationStatus = await Permission.notification.status;
+      if (!notificationStatus.isGranted) {
+        await Permission.notification.request();
+      }
+
+      await Permission.storage.request();
+      await Permission.ignoreBatteryOptimizations.request();
+    } catch (e) {
+      debugPrint('[VPN] Ошибка запроса разрешений: $e');
+    }
+  }
+
+  void _onVpnStatusChanged(VpnStatus? status) {
+    if (mounted) {
+      debugPrint('[VPN] Status changed: ${status?.toJson()}');
+      
+      if (status?.duration != null && status?.duration != "00:00:00") {
+        _connectionTimer?.cancel();
+        _isConnecting = false;
+        setState(() {
+          _vpnStage = VPNStage.connected;
+        });
+      }
+    }
+  }
+
+  void _onVpnStageChanged(VPNStage? stage, String? message) {
+    if (mounted) {
+      debugPrint('[VPN] Stage changed: $stage, Message: $message');
+      setState(() {
+        _vpnStage = stage ?? VPNStage.disconnected;
+        
+        switch (_vpnStage) {
+          case VPNStage.connected:
+            _connectionTimer?.cancel();
+            _isConnecting = false;
+            break;
+          case VPNStage.disconnected:
+            _connectionTimer?.cancel();
+            _isConnecting = false;
+            break;
+          case VPNStage.error:
+            _connectionTimer?.cancel();
+            _isConnecting = false;
+            _showError('Ошибка подключения VPN: $message');
+            break;
+          default:
+            break;
+        }
+      });
+    }
+  }
+
+  void _showError(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    }
   }
 
   Future<void> _loadDefaultLocation() async {
@@ -67,9 +169,9 @@ class _MainScreen2State extends State<MainScreen2> {
   void _initVpnStateListener() {
     _vpnService.vpnStateStream.listen((state) {
       if (!mounted) return;
-      
+
       debugPrint('[UI] VPN state changed to: $state');
-      
+
       setState(() {
         switch (state) {
           case 'CONNECTED':
@@ -81,7 +183,7 @@ class _MainScreen2State extends State<MainScreen2> {
               debugPrint('[UI] VPN Connected - Starting traffic monitoring');
             }
             break;
-            
+
           case 'DISCONNECTED':
             isConnected = false;
             isConnecting = false;
@@ -89,7 +191,7 @@ class _MainScreen2State extends State<MainScreen2> {
             _stopTrafficMonitoring();
             debugPrint('[UI] VPN Disconnected - Cleared traffic data');
             break;
-            
+
           case 'CONNECTING':
             if (!isConnecting) {
               isConnected = false;
@@ -99,7 +201,7 @@ class _MainScreen2State extends State<MainScreen2> {
               debugPrint('[UI] VPN Connecting');
             }
             break;
-            
+
           case 'DISCONNECTING':
             isConnected = false;
             isConnecting = true;
@@ -125,7 +227,7 @@ class _MainScreen2State extends State<MainScreen2> {
 
   void _startTrafficMonitoring() {
     _stopTrafficMonitoring();
-    
+
     if (!mounted || !isConnected) return;
 
     _trafficTimer = Timer.periodic(Duration(seconds: 1), (timer) {
@@ -138,10 +240,10 @@ class _MainScreen2State extends State<MainScreen2> {
       if (status != null) {
         setState(() {
           // Конвертируем байты в килобайты и округляем до 2 знаков
-          downloadSpeed = (double.tryParse(status.byteIn ?? '0')! / 1024).roundToDouble();
-          uploadSpeed = (double.tryParse(status.byteOut ?? '0')! / 1024).roundToDouble();
+          downloadSpeed = (double.tryParse(status['byteIn'] ?? '0')! / 1024).roundToDouble();
+          uploadSpeed = (double.tryParse(status['byteOut'] ?? '0')! / 1024).roundToDouble();
           ping = 20 + Random().nextInt(80); // Временно оставим рандомный пинг
-          
+
           // Обновляем IP адрес только если он еще не установлен
           if (userIpAddress == null) {
             userIpAddress = '192.168.${Random().nextInt(255)}.${Random().nextInt(255)}';
@@ -151,45 +253,89 @@ class _MainScreen2State extends State<MainScreen2> {
     });
   }
 
-  @override
-  void dispose() {
-    _trafficTimer?.cancel();
-    _vpnService.dispose();
-    super.dispose();
+  Future<void> _connectVPN() async {
+    if (!mounted) return;
+    
+    if (selectedLocation == null) {
+      _showError('Пожалуйста, выберите локацию VPN');
+      return;
+    }
+
+    if (_isConnecting) {
+      debugPrint('[VPN] Подключение уже выполняется');
+      return;
+    }
+
+    try {
+      _isConnecting = true;
+      
+      if (!_isInitialized) {
+        await _initializeVPN();
+      }
+
+      setState(() {
+        _vpnStage = VPNStage.connecting;
+      });
+
+      final config = await _apiService.getVpnConfig(selectedLocation!.id);
+      if (config == null || config.isEmpty) {
+        throw Exception('Не удалось получить конфигурацию VPN');
+      }
+
+      debugPrint('[VPN] Начало подключения с конфигурацией');
+      
+      final formattedConfig = config.replaceAll('\r\n', '\n');
+      
+      _connectionTimer?.cancel();
+      _connectionTimer = Timer(const Duration(seconds: 30), () {
+        if (_isConnecting) {
+          _safeDisconnect();
+          _showError('Таймаут подключения к VPN');
+        }
+      });
+
+      engine.connect(
+        formattedConfig,
+        "SpyDog VPN",
+        username: '',
+        password: '',
+        bypassPackages: [],
+        certIsRequired: true,
+      );
+
+    } catch (e) {
+      debugPrint('[VPN] Ошибка подключения: $e');
+      _safeDisconnect();
+      _showError('Ошибка подключения к VPN: ${e.toString()}');
+    }
   }
 
-  Future<void> _connectVPN() async {
-    if (isConnected) {
-      await _vpnService.disconnect();
-      return;
+  void _safeDisconnect() {
+    _connectionTimer?.cancel();
+    _isConnecting = false;
+    if (mounted) {
+      setState(() {
+        _vpnStage = VPNStage.disconnected;
+      });
     }
-
-    if (isAutoMode) {
-      final locations = await _apiService.getLocations();
-      if (locations.isEmpty) {
-        debugPrint('[VPN] No locations available for Auto mode');
-        return;
-      }
-      selectedLocation = locations.first;
+    try {
+      engine.disconnect();
+    } catch (e) {
+      debugPrint('[VPN] Ошибка отключения: $e');
     }
+  }
 
-    if (selectedLocation == null) {
-      debugPrint('[VPN] No location selected');
-      return;
+  Future<void> _disconnectVPN() async {
+    try {
+      _safeDisconnect();
+    } catch (e) {
+      debugPrint('[VPN] Ошибка отключения: $e');
     }
-
-    final config = await _apiService.getVpnConfig(selectedLocation!.id);
-    if (config == null) {
-      debugPrint('[VPN] Failed to get config for location');
-      return;
-    }
-
-    await _vpnService.connect(config);
   }
 
   Widget buildConnectButton() {
     String buttonImagePath;
-    
+
     if (isDarkTheme) {
       buttonImagePath = isConnected
           ? 'assets/images/Buttononndarkonn.png'
@@ -203,7 +349,7 @@ class _MainScreen2State extends State<MainScreen2> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: isConnecting ? null : _connectVPN,
+        onTap: _isConnecting ? null : (_vpnStage == VPNStage.connected ? _disconnectVPN : _connectVPN),
         borderRadius: BorderRadius.circular(85),
         child: Container(
           width: 170,
@@ -217,7 +363,7 @@ class _MainScreen2State extends State<MainScreen2> {
                 height: 170,
                 fit: BoxFit.contain,
               ),
-              if (isConnecting)
+              if (_isConnecting)
                 CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(
                     isDarkTheme ? Colors.white : Colors.blue,
@@ -297,33 +443,7 @@ class _MainScreen2State extends State<MainScreen2> {
         borderRadius: BorderRadius.circular(7),
       ),
       child: GestureDetector(
-        onTap: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => CountresScreen(
-                isAutoMode: isAutoMode,
-                selectedCountry: selectedCountry ?? 'Auto',
-                currentLocation: selectedLocation,
-              ),
-            ),
-          );
-
-          if (result != null) {
-            debugPrint('[UI] Location selection result: $result');
-            setState(() {
-              isAutoMode = result['isAutoMode'] ?? false;
-              if (isAutoMode) {
-                selectedCountry = 'Auto';
-                selectedLocation = null;
-              } else {
-                selectedCountry = result['country'];
-                selectedLocation = result['location'];
-              }
-              debugPrint('[UI] Updated state - isAutoMode: $isAutoMode, selectedCountry: $selectedCountry');
-            });
-          }
-        },
+        onTap: _showCountrySelection,
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 15),
           child: Row(
@@ -593,12 +713,12 @@ class _MainScreen2State extends State<MainScreen2> {
     return Drawer(
       child: Container(
         color: isDarkTheme ? Color(0xFF101B36) : Colors.white,
-        child: ListView(
+        child: Column(
           children: [
             DrawerHeader(
               decoration: BoxDecoration(
                 color: isDarkTheme ? Color(0xFF0C1630) : Color(0xFFECF3FB),
-              ),
+                ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -610,45 +730,74 @@ class _MainScreen2State extends State<MainScreen2> {
                 ],
               ),
             ),
-            ListTile(
-              leading: Icon(
-                Icons.location_on,
-                color: isDarkTheme ? Colors.white : Color(0xFF101B36),
-              ),
-              title: Text(
-                'Location',
-                style: TextStyle(
-                  color: isDarkTheme ? Colors.white : Color(0xFF101B36),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: ListView(
+                  children: [
+                    buildMenuItem(
+                      iconPath: 'assets/images/location.png',
+                      text: 'Location',
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CountresScreen(
+                              isAutoMode: isAutoMode,
+                              selectedCountry: selectedCountry ?? 'Auto',
+                              currentLocation: selectedLocation,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    SizedBox(height: 25),
+                    buildMenuItem(
+                      iconPath: 'assets/images/language.png',
+                      text: 'Language',
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => LanguageScreen()),
+                        );
+                      },
+                    ),
+                    SizedBox(height: 25),
+                    buildMenuItem(
+                      iconPath: 'assets/images/share.png',
+                      text: 'Share App',
+                      onTap: () {
+                        Share.share('Check out this awesome VPN app!');
+                      },
+                    ),
+                    SizedBox(height: 25),
+                    buildMenuItem(
+                      iconPath: 'assets/images/rate.png',
+                      text: 'Rate App',
+                      onTap: () async {
+                        final url = Uri.parse('market://details?id=com.spydog.vpn');
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url);
+                        }
+                      },
+                    ),
+                    SizedBox(height: 25),
+                    buildMenuItem(
+                      iconPath: 'assets/images/privacy.png',
+                      text: 'Privacy Policy',
+                      onTap: () async {
+                        final url = Uri.parse('https://example.com/privacy');
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url);
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => CountresScreen(
-                      isAutoMode: isAutoMode,
-                      selectedCountry: selectedCountry ?? 'Auto',
-                      currentLocation: selectedLocation,
-                    ),
-                  ),
-                ).then((result) {
-                  if (result != null) {
-                    setState(() {
-                      isAutoMode = result['isAutoMode'] ?? false;
-                      if (isAutoMode) {
-                        selectedCountry = 'Auto';
-                        selectedLocation = null;
-                      } else {
-                        selectedCountry = result['country'];
-                        selectedLocation = result['location'];
-                      }
-                    });
-                  }
-                });
-              },
             ),
-            // Другие пункты меню
           ],
         ),
       ),
@@ -664,27 +813,62 @@ class _MainScreen2State extends State<MainScreen2> {
       onTap: onTap,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Image.asset(
-            iconPath,
-            width: 24,
-            height: 24,
+          Icon(
+            _getIconData(iconPath),
+            size: 24,
+            color: isDarkTheme ? Colors.white : Color(0xFF101B36),
           ),
           SizedBox(width: 15),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontFamily: 'Montserrat',
-                fontSize: 16,
-                color: isDarkTheme ? Colors.white : Color(0xFF101B36),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'Montserrat',
+              fontSize: 16,
+              color: isDarkTheme ? Colors.white : Color(0xFF101B36),
             ),
           ),
         ],
       ),
     );
+  }
+
+  IconData _getIconData(String iconPath) {
+    switch (iconPath) {
+      case 'assets/images/location.png':
+        return Icons.location_on;
+      case 'assets/images/language.png':
+        return Icons.language;
+      case 'assets/images/share.png':
+        return Icons.share;
+      case 'assets/images/rate.png':
+        return Icons.star;
+      case 'assets/images/privacy.png':
+        return Icons.privacy_tip;
+      default:
+        return Icons.error;
+    }
+  }
+
+  void _showCountrySelection() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CountresScreen(
+          isAutoMode: isAutoMode,
+          selectedCountry: selectedCountry ?? 'Auto',
+          currentLocation: selectedLocation,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        isAutoMode = result['isAutoMode'] ?? false;
+        selectedCountry = result['country'];
+        selectedLocation = result['location'];
+      });
+    }
   }
 }
